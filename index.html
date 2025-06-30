@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
   <title>BTC Spread Chart</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
@@ -12,21 +13,68 @@
       height: 100%;
       width: 100%;
     }
-
     #top {
       width: 100vw;
-      height: 70vh;
-    }
-
-    #bottom {
-      width: 100vw;
-      height: 30vh;
+      height: 100vh;
     }
   </style>
 </head>
 <body>
   <div id="top"></div>
-  <div id="bottom"></div>
-  <script src="chart.js"></script>
+
+  <script>
+    const chart = LightweightCharts.createChart(document.getElementById('top'), {
+      layout: { background: { color: '#111' }, textColor: '#DDD' },
+      grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+      timeScale: { timeVisible: true },
+      crosshair: { mode: 1 },
+    });
+
+    const candles = chart.addCandlestickSeries({
+      upColor: '#0f0',
+      downColor: '#f00',
+      borderVisible: false,
+      wickUpColor: '#0f0',
+      wickDownColor: '#f00',
+    });
+
+    const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
+    console.log('📡 Fetching from:', csvUrl);
+
+    fetch(csvUrl)
+      .then(res => res.text())
+      .then(text => {
+        console.log('✅ Raw CSV:', text.split('\\n').slice(0, 5));
+        const rows = text.trim().split('\\n');
+        const headers = rows.shift().split(',');
+        const tsIndex = headers.indexOf('timestamp');
+        const priceIndex = headers.indexOf('price');
+
+        const candleMap = {};
+
+        rows.forEach(row => {
+          const cells = row.split(',');
+          const timeMs = new Date(cells[tsIndex]).getTime();
+          const price = parseFloat(cells[priceIndex]);
+          const time = Math.floor(timeMs / 1000);
+          const bucket = Math.floor(time / 300) * 300;
+
+          if (!candleMap[bucket]) {
+            candleMap[bucket] = { time: bucket, open: price, high: price, low: price, close: price };
+          } else {
+            candleMap[bucket].high = Math.max(candleMap[bucket].high, price);
+            candleMap[bucket].low = Math.min(candleMap[bucket].low, price);
+            candleMap[bucket].close = price;
+          }
+        });
+
+        const candleData = Object.values(candleMap).sort((a, b) => a.time - b.time);
+        candles.setData(candleData);
+      })
+      .catch(err => {
+        console.error('❌ Chart load error:', err);
+        alert('Error loading chart.');
+      });
+  </script>
 </body>
 </html>
