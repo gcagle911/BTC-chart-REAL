@@ -4,32 +4,28 @@
   <title>BTC Spread Chart</title>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
       background-color: #000;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-
-    #top, #bottom {
-      flex: 1;
+      height: 100%;
+      width: 100%;
     }
 
     #top {
-      height: 70%;
+      width: 100vw;
+      height: 70vh;
     }
 
     #bottom {
-      height: 30%;
+      width: 100vw;
+      height: 30vh;
     }
   </style>
 </head>
 <body>
   <div id="top"></div>
   <div id="bottom"></div>
-
   <script src="chart.js"></script>
 </body>
 </html>
