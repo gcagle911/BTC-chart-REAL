@@ -1,16 +1,22 @@
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
-  timeScale: { timeVisible: true, barSpacing: 10 },
+  timeScale: { timeVisible: true, secondsVisible: false },
   crosshair: { mode: 1 },
 });
 
-const candles = chart.addCandlestickSeries();
-const spreadMA = chart.addLineSeries({ color: 'orange', lineWidth: 2 });
+const candles = chart.addCandlestickSeries({
+  upColor: '#26a69a',
+  downColor: '#ef5350',
+  borderUpColor: '#26a69a',
+  borderDownColor: '#ef5350',
+  wickUpColor: '#26a69a',
+  wickDownColor: '#ef5350',
+});
 
-const ema50Series = chart.addLineSeries({ color: 'white', lineWidth: 1 });
-const ema100Series = chart.addLineSeries({ color: 'gold', lineWidth: 1 });
-const ema200Series = chart.addLineSeries({ color: 'pink', lineWidth: 1 });
+const spread50 = chart.addLineSeries({ color: 'white', lineWidth: 2 });
+const spread100 = chart.addLineSeries({ color: 'gold', lineWidth: 2 });
+const spread200 = chart.addLineSeries({ color: 'pink', lineWidth: 2 });
 
 const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
 
@@ -27,90 +33,56 @@ fetch(csvUrl)
     const priceIndex = headers.indexOf('price');
     const spreadIndex = headers.indexOf('spread');
 
-    const rawData = [];
+    const spreadVals = [];
+    const spreadMA50 = [];
+    const spreadMA100 = [];
+    const spreadMA200 = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const cells = rows[i].split(',');
-      const time = Math.floor(new Date(cells[tsIndex]).getTime() / 1000);
+    const candleMap = {};
+
+    rows.forEach((row, i) => {
+      const cells = row.split(',');
+      const timestamp = new Date(cells[tsIndex]);
+      const time = Math.floor(timestamp.getTime() / 1000);
+      const bucket = Math.floor(time / 300) * 300;
       const price = parseFloat(cells[priceIndex]);
       const spread = parseFloat(cells[spreadIndex]);
 
-      rawData.push({ time, price, spread });
-    }
-
-    // Group into 5-minute candles
-    const candleData = [];
-    const spreadData = [];
-
-    const grouped = {};
-    for (const row of rawData) {
-      const roundedTime = Math.floor(row.time / 300) * 300; // group by 5 minutes
-      if (!grouped[roundedTime]) {
-        grouped[roundedTime] = {
-          time: roundedTime,
-          open: row.price,
-          high: row.price,
-          low: row.price,
-          close: row.price,
-          spreads: [row.spread],
-        };
+      // Build 5-minute candles
+      if (!candleMap[bucket]) {
+        candleMap[bucket] = { time: bucket, open: price, high: price, low: price, close: price };
       } else {
-        grouped[roundedTime].high = Math.max(grouped[roundedTime].high, row.price);
-        grouped[roundedTime].low = Math.min(grouped[roundedTime].low, row.price);
-        grouped[roundedTime].close = row.price;
-        grouped[roundedTime].spreads.push(row.spread);
-      }
-    }
-
-    for (const t of Object.keys(grouped).sort((a, b) => a - b)) {
-      const bar = grouped[t];
-      candleData.push({
-        time: bar.time,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-      });
-
-      const avgSpread =
-        bar.spreads.reduce((sum, val) => sum + val, 0) / bar.spreads.length;
-
-      spreadData.push({
-        time: bar.time,
-        value: avgSpread,
-      });
-    }
-
-    // EMA calculation function
-    function calculateEMA(data, period) {
-      const ema = [];
-      let multiplier = 2 / (period + 1);
-      let prevEma = data[0].value;
-
-      for (let i = 0; i < data.length; i++) {
-        const current = data[i].value;
-        if (i === 0) {
-          ema.push({ time: data[i].time, value: current });
-        } else {
-          prevEma = (current - prevEma) * multiplier + prevEma;
-          ema.push({ time: data[i].time, value: prevEma });
-        }
+        candleMap[bucket].high = Math.max(candleMap[bucket].high, price);
+        candleMap[bucket].low = Math.min(candleMap[bucket].low, price);
+        candleMap[bucket].close = price;
       }
 
-      return ema;
-    }
+      // Store spread values for MAs
+      spreadVals.push({ time, value: spread });
 
-    const ema50 = calculateEMA(spreadData, 50);
-    const ema100 = calculateEMA(spreadData, 100);
-    const ema200 = calculateEMA(spreadData, 200);
+      // Calculate EMAs
+      if (spreadVals.length >= 50) {
+        const avg50 = spreadVals.slice(-50).reduce((a, b) => a + b.value, 0) / 50;
+        spreadMA50.push({ time, value: avg50 });
+      }
+      if (spreadVals.length >= 100) {
+        const avg100 = spreadVals.slice(-100).reduce((a, b) => a + b.value, 0) / 100;
+        spreadMA100.push({ time, value: avg100 });
+      }
+      if (spreadVals.length >= 200) {
+        const avg200 = spreadVals.slice(-200).reduce((a, b) => a + b.value, 0) / 200;
+        spreadMA200.push({ time, value: avg200 });
+      }
+    });
 
+    const candleData = Object.values(candleMap);
     candles.setData(candleData);
-    spreadMA.setData(spreadData);
-    ema50Series.setData(ema50);
-    ema100Series.setData(ema100);
-    ema200Series.setData(ema200);
+    spread50.setData(spreadMA50);
+    spread100.setData(spreadMA100);
+    spread200.setData(spreadMA200);
 
     chart.timeScale().fitContent();
+    chart.timeScale().scrollToPosition(0, false);
   })
   .catch(err => {
     console.error('Chart load error:', err);
