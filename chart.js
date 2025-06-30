@@ -1,43 +1,59 @@
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
-  timeScale: { timeVisible: true, secondsVisible: false },
+  timeScale: { timeVisible: true },
   crosshair: { mode: 1 },
 });
 
-const candleSeries = chart.addCandlestickSeries();
-const spreadLine = chart.addLineSeries({ color: 'orange', lineWidth: 2 });
+const candles = chart.addCandlestickSeries();
+const spreadMA = chart.addLineSeries({ color: 'orange', lineWidth: 2 });
 
-const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv'; // ✅ live CSV
+// ✅ REAL CSV URL
+const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
 
 fetch(csvUrl)
-  .then(res => res.text())
-  .then(csv => {
-    const rows = csv.trim().split('\n').slice(1); // skip header
-    const candles = [];
-    const spreadMA = [];
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    return res.text();
+  })
+  .then(text => {
+    const rows = text.trim().split('\n');
+    const headers = rows.shift().split(',');
+
+    const tsIndex = headers.indexOf('timestamp');
+    const priceIndex = headers.indexOf('price');
+    const spreadIndex = headers.indexOf('spread');
+
+    const candleData = [];
+    const maData = [];
 
     for (let i = 0; i < rows.length; i++) {
-      const [ts, price, bid, ask, spread] = rows[i].split(',');
-      const time = Math.floor(new Date(ts).getTime() / 1000);
+      const cells = rows[i].split(',');
+      const time = Math.floor(new Date(cells[tsIndex]).getTime() / 1000);
+      const price = parseFloat(cells[priceIndex]);
 
-      candles.push({
-        time: time,
-        open: parseFloat(price),
-        high: parseFloat(price),
-        low: parseFloat(price),
-        close: parseFloat(price),
+      candleData.push({
+        time,
+        open: price,
+        high: price,
+        low: price,
+        close: price,
       });
 
       if (i >= 9) {
-        const avg = rows.slice(i - 9, i + 1)
-          .map(r => parseFloat(r.split(',')[4]))
+        const avg = rows
+          .slice(i - 9, i + 1)
+          .map(r => parseFloat(r.split(',')[spreadIndex]))
           .reduce((a, b) => a + b, 0) / 10;
 
-        spreadMA.push({ time: time, value: avg });
+        maData.push({ time, value: avg });
       }
     }
 
-    candleSeries.setData(candles);
-    spreadLine.setData(spreadMA);
+    candles.setData(candleData);
+    spreadMA.setData(maData);
+  })
+  .catch(err => {
+    console.error('Chart load error:', err);
+    alert('Error loading data from CSV. Check console.');
   });
