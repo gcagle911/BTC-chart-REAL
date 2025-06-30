@@ -1,16 +1,31 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>BTC Spread Chart</title>
-    <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
-    <style>
-      body { margin: 0; background-color: #111; }
-      #chart { width: 100vw; height: 100vh; }
-    </style>
-  </head>
- <body>
-  <div id="chart" style="height: 500px;"></div>
-  <div id="volume" style="height: 150px;"></div>
+<head>
+  <title>BTC Spread Chart</title>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #top, #bottom {
+      flex: 1;
+    }
+    #top {
+      height: 70%;
+    }
+    #bottom {
+      height: 30%;
+    }
+  </style>
+</head>
+<body>
+  <div id="top"></div>
+  <div id="bottom"></div>
   <script src="chart.js"></script>
 </body>
 </html>
