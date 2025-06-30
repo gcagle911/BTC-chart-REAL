@@ -2,33 +2,33 @@ const chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
   timeScale: { timeVisible: true, secondsVisible: false },
+  width: window.innerWidth,
+  height: window.innerHeight * 0.7, // Main chart top 70%
   crosshair: { mode: 1 },
-  rightPriceScale: { scaleMargins: { top: 0.2, bottom: 0.25 } }
 });
 
-const volumePane = LightweightCharts.createChart(document.getElementById('volume'), {
+// Sub-panel for Z-score (bottom 30%)
+const zChart = LightweightCharts.createChart(document.body.appendChild(document.createElement('div')), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
   timeScale: { visible: false },
-  height: 100
+  width: window.innerWidth,
+  height: window.innerHeight * 0.3,
 });
+zChart.timeScale().setVisibleLogicalRange(chart.timeScale().getVisibleLogicalRange());
 
-// Candles
 const candles = chart.addCandlestickSeries({
   upColor: '#0f0',
   downColor: '#f00',
   borderVisible: false,
   wickUpColor: '#0f0',
-  wickDownColor: '#f00'
+  wickDownColor: '#f00',
 });
 
-// Spread MAs
-const spreadMA50 = chart.addLineSeries({ color: 'white', lineWidth: 1 });
-const spreadMA100 = chart.addLineSeries({ color: 'gold', lineWidth: 1 });
-const spreadMA200 = chart.addLineSeries({ color: 'pink', lineWidth: 1 });
-
-// Z-score (bottom panel)
-const zScoreSeries = volumePane.addLineSeries({ color: 'cyan', lineWidth: 1 });
+const sma50 = chart.addLineSeries({ color: 'white', lineWidth: 1 });
+const sma100 = chart.addLineSeries({ color: 'gold', lineWidth: 1 });
+const sma200 = chart.addLineSeries({ color: 'pink', lineWidth: 1 });
+const zScoreLine = zChart.addLineSeries({ color: '#0ff', lineWidth: 2 });
 
 const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
 
@@ -45,54 +45,56 @@ fetch(csvUrl)
     const priceIndex = headers.indexOf('price');
     const spreadIndex = headers.indexOf('spread');
 
-    const candleData = [];
-    const spreadList = [];
-    const ma50 = [];
-    const ma100 = [];
-    const ma200 = [];
-    const zScores = [];
+    const candleMap = {};
+    const spreadArr = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const cells = rows[i].split(',');
-      const time = Math.floor(new Date(cells[tsIndex]).getTime() / 1000);
+    rows.forEach(row => {
+      const cells = row.split(',');
+      const timeMs = new Date(cells[tsIndex]).getTime();
       const price = parseFloat(cells[priceIndex]);
       const spread = parseFloat(cells[spreadIndex]);
+      const time = Math.floor(timeMs / 1000);
+      const bucket = Math.floor(time / 300) * 300; // 5-minute bucket
 
-      candleData.push({ time, open: price, high: price, low: price, close: price });
-      spreadList.push({ time, value: spread });
-
-      const sma = (period) => {
-        if (i >= period - 1) {
-          const slice = rows.slice(i - period + 1, i + 1);
-          const avg = slice
-            .map(r => parseFloat(r.split(',')[spreadIndex]))
-            .reduce((a, b) => a + b, 0) / period;
-          return { time, value: avg };
-        }
-      };
-
-      const zWindow = 50;
-      if (i >= zWindow - 1) {
-        const values = rows.slice(i - zWindow + 1, i + 1).map(r => parseFloat(r.split(',')[spreadIndex]));
-        const mean = values.reduce((a, b) => a + b, 0) / zWindow;
-        const std = Math.sqrt(values.map(x => (x - mean) ** 2).reduce((a, b) => a + b, 0) / zWindow);
-        const z = std === 0 ? 0 : (spread - mean) / std;
-        zScores.push({ time, value: z });
+      // Candlestick data by 5-min bucket
+      if (!candleMap[bucket]) {
+        candleMap[bucket] = { time: bucket, open: price, high: price, low: price, close: price };
+      } else {
+        candleMap[bucket].high = Math.max(candleMap[bucket].high, price);
+        candleMap[bucket].low = Math.min(candleMap[bucket].low, price);
+        candleMap[bucket].close = price;
       }
 
-      const sma50 = sma(50);
-      const sma100 = sma(100);
-      const sma200 = sma(200);
-      if (sma50) ma50.push(sma50);
-      if (sma100) ma100.push(sma100);
-      if (sma200) ma200.push(sma200);
+      spreadArr.push({ time, value: spread });
+    });
+
+    const candleData = Object.values(candleMap).sort((a, b) => a.time - b.time);
+    candles.setData(candleData);
+
+    // Simple Moving Averages
+    function calcSMA(data, len) {
+      return data.map((d, i) => {
+        if (i < len - 1) return null;
+        const slice = data.slice(i - len + 1, i + 1);
+        const avg = slice.reduce((sum, x) => sum + x.value, 0) / len;
+        return { time: d.time, value: avg };
+      }).filter(Boolean);
     }
 
-    candles.setData(candleData);
-    spreadMA50.setData(ma50);
-    spreadMA100.setData(ma100);
-    spreadMA200.setData(ma200);
-    zScoreSeries.setData(zScores);
+    sma50.setData(calcSMA(spreadArr, 50));
+    sma100.setData(calcSMA(spreadArr, 100));
+    sma200.setData(calcSMA(spreadArr, 200));
+
+    // Z-score of spread
+    const zScoreData = spreadArr.map((d, i) => {
+      const window = spreadArr.slice(Math.max(0, i - 50), i + 1);
+      const values = window.map(x => x.value);
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const std = Math.sqrt(values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length);
+      return { time: d.time, value: std === 0 ? 0 : (d.value - mean) / std };
+    });
+
+    zScoreLine.setData(zScoreData);
   })
   .catch(err => {
     console.error('Chart load error:', err);
