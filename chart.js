@@ -8,7 +8,7 @@ const chart = LightweightCharts.createChart(document.getElementById('chart'), {
 const candleSeries = chart.addCandlestickSeries();
 const spreadLine = chart.addLineSeries({ color: 'orange', lineWidth: 2 });
 
-const csvUrl = 'https://your-render-app.onrender.com/data.csv'; // <-- replace this
+const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv'; // ✅ live CSV
 
 fetch(csvUrl)
   .then(res => res.text())
