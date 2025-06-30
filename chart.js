@@ -3,20 +3,32 @@ const chart = LightweightCharts.createChart(document.getElementById('chart'), {
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
   timeScale: { timeVisible: true, secondsVisible: false },
   crosshair: { mode: 1 },
+  rightPriceScale: { scaleMargins: { top: 0.2, bottom: 0.25 } }
 });
 
+const volumePane = LightweightCharts.createChart(document.getElementById('volume'), {
+  layout: { background: { color: '#111' }, textColor: '#DDD' },
+  grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+  timeScale: { visible: false },
+  height: 100
+});
+
+// Candles
 const candles = chart.addCandlestickSeries({
-  upColor: '#26a69a',
-  downColor: '#ef5350',
-  borderUpColor: '#26a69a',
-  borderDownColor: '#ef5350',
-  wickUpColor: '#26a69a',
-  wickDownColor: '#ef5350',
+  upColor: '#0f0',
+  downColor: '#f00',
+  borderVisible: false,
+  wickUpColor: '#0f0',
+  wickDownColor: '#f00'
 });
 
-const spread50 = chart.addLineSeries({ color: 'white', lineWidth: 2 });
-const spread100 = chart.addLineSeries({ color: 'gold', lineWidth: 2 });
-const spread200 = chart.addLineSeries({ color: 'pink', lineWidth: 2 });
+// Spread MAs
+const spreadMA50 = chart.addLineSeries({ color: 'white', lineWidth: 1 });
+const spreadMA100 = chart.addLineSeries({ color: 'gold', lineWidth: 1 });
+const spreadMA200 = chart.addLineSeries({ color: 'pink', lineWidth: 1 });
+
+// Z-score (bottom panel)
+const zScoreSeries = volumePane.addLineSeries({ color: 'cyan', lineWidth: 1 });
 
 const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
 
@@ -33,56 +45,54 @@ fetch(csvUrl)
     const priceIndex = headers.indexOf('price');
     const spreadIndex = headers.indexOf('spread');
 
-    const spreadVals = [];
-    const spreadMA50 = [];
-    const spreadMA100 = [];
-    const spreadMA200 = [];
+    const candleData = [];
+    const spreadList = [];
+    const ma50 = [];
+    const ma100 = [];
+    const ma200 = [];
+    const zScores = [];
 
-    const candleMap = {};
-
-    rows.forEach((row, i) => {
-      const cells = row.split(',');
-      const timestamp = new Date(cells[tsIndex]);
-      const time = Math.floor(timestamp.getTime() / 1000);
-      const bucket = Math.floor(time / 300) * 300;
+    for (let i = 0; i < rows.length; i++) {
+      const cells = rows[i].split(',');
+      const time = Math.floor(new Date(cells[tsIndex]).getTime() / 1000);
       const price = parseFloat(cells[priceIndex]);
       const spread = parseFloat(cells[spreadIndex]);
 
-      // Build 5-minute candles
-      if (!candleMap[bucket]) {
-        candleMap[bucket] = { time: bucket, open: price, high: price, low: price, close: price };
-      } else {
-        candleMap[bucket].high = Math.max(candleMap[bucket].high, price);
-        candleMap[bucket].low = Math.min(candleMap[bucket].low, price);
-        candleMap[bucket].close = price;
+      candleData.push({ time, open: price, high: price, low: price, close: price });
+      spreadList.push({ time, value: spread });
+
+      const sma = (period) => {
+        if (i >= period - 1) {
+          const slice = rows.slice(i - period + 1, i + 1);
+          const avg = slice
+            .map(r => parseFloat(r.split(',')[spreadIndex]))
+            .reduce((a, b) => a + b, 0) / period;
+          return { time, value: avg };
+        }
+      };
+
+      const zWindow = 50;
+      if (i >= zWindow - 1) {
+        const values = rows.slice(i - zWindow + 1, i + 1).map(r => parseFloat(r.split(',')[spreadIndex]));
+        const mean = values.reduce((a, b) => a + b, 0) / zWindow;
+        const std = Math.sqrt(values.map(x => (x - mean) ** 2).reduce((a, b) => a + b, 0) / zWindow);
+        const z = std === 0 ? 0 : (spread - mean) / std;
+        zScores.push({ time, value: z });
       }
 
-      // Store spread values for MAs
-      spreadVals.push({ time, value: spread });
+      const sma50 = sma(50);
+      const sma100 = sma(100);
+      const sma200 = sma(200);
+      if (sma50) ma50.push(sma50);
+      if (sma100) ma100.push(sma100);
+      if (sma200) ma200.push(sma200);
+    }
 
-      // Calculate EMAs
-      if (spreadVals.length >= 50) {
-        const avg50 = spreadVals.slice(-50).reduce((a, b) => a + b.value, 0) / 50;
-        spreadMA50.push({ time, value: avg50 });
-      }
-      if (spreadVals.length >= 100) {
-        const avg100 = spreadVals.slice(-100).reduce((a, b) => a + b.value, 0) / 100;
-        spreadMA100.push({ time, value: avg100 });
-      }
-      if (spreadVals.length >= 200) {
-        const avg200 = spreadVals.slice(-200).reduce((a, b) => a + b.value, 0) / 200;
-        spreadMA200.push({ time, value: avg200 });
-      }
-    });
-
-    const candleData = Object.values(candleMap);
     candles.setData(candleData);
-    spread50.setData(spreadMA50);
-    spread100.setData(spreadMA100);
-    spread200.setData(spreadMA200);
-
-    chart.timeScale().fitContent();
-    chart.timeScale().scrollToPosition(0, false);
+    spreadMA50.setData(ma50);
+    spreadMA100.setData(ma100);
+    spreadMA200.setData(ma200);
+    zScoreSeries.setData(zScores);
   })
   .catch(err => {
     console.error('Chart load error:', err);
