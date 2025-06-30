@@ -1,21 +1,15 @@
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+const chart = LightweightCharts.createChart(document.getElementById('top'), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
-  timeScale: { timeVisible: true, secondsVisible: false },
-  width: window.innerWidth,
-  height: window.innerHeight * 0.7, // Main chart top 70%
+  timeScale: { timeVisible: true },
   crosshair: { mode: 1 },
 });
 
-// Sub-panel for Z-score (bottom 30%)
-const zChart = LightweightCharts.createChart(document.body.appendChild(document.createElement('div')), {
+const zChart = LightweightCharts.createChart(document.getElementById('bottom'), {
   layout: { background: { color: '#111' }, textColor: '#DDD' },
   grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
   timeScale: { visible: false },
-  width: window.innerWidth,
-  height: window.innerHeight * 0.3,
 });
-zChart.timeScale().setVisibleLogicalRange(chart.timeScale().getVisibleLogicalRange());
 
 const candles = chart.addCandlestickSeries({
   upColor: '#0f0',
@@ -54,9 +48,9 @@ fetch(csvUrl)
       const price = parseFloat(cells[priceIndex]);
       const spread = parseFloat(cells[spreadIndex]);
       const time = Math.floor(timeMs / 1000);
-      const bucket = Math.floor(time / 300) * 300; // 5-minute bucket
+      const bucket = Math.floor(time / 300) * 300; // 5-min bucket
 
-      // Candlestick data by 5-min bucket
+      // Candlestick OHLC
       if (!candleMap[bucket]) {
         candleMap[bucket] = { time: bucket, open: price, high: price, low: price, close: price };
       } else {
@@ -71,7 +65,6 @@ fetch(csvUrl)
     const candleData = Object.values(candleMap).sort((a, b) => a.time - b.time);
     candles.setData(candleData);
 
-    // Simple Moving Averages
     function calcSMA(data, len) {
       return data.map((d, i) => {
         if (i < len - 1) return null;
@@ -85,7 +78,6 @@ fetch(csvUrl)
     sma100.setData(calcSMA(spreadArr, 100));
     sma200.setData(calcSMA(spreadArr, 200));
 
-    // Z-score of spread
     const zScoreData = spreadArr.map((d, i) => {
       const window = spreadArr.slice(Math.max(0, i - 50), i + 1);
       const values = window.map(x => x.value);
