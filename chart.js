@@ -13,6 +13,7 @@ const candles = chart.addCandlestickSeries({
   wickDownColor: '#f00',
 });
 
+console.log('👋 chart.js is running');
 const csvUrl = 'https://btc-logger-trxi.onrender.com/data.csv';
 
 fetch(csvUrl)
